@@ -12,7 +12,8 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 app.get("/", (req, res) => {
   res.json({
     status: "online",
-    service: "Lisan Translation API"
+    service: "Lisan Translation API",
+    model: "gemini-2.5-flash-lite"
   });
 });
 
@@ -33,25 +34,24 @@ app.post("/translate", async (req, res) => {
     }
 
     const prompt = `
-You are Lisan, a professional real-time conversational translator.
+You are Lisan, a real-time conversational translator.
 
-Translate the following message from ${source} to ${target}.
+Translate this message from ${source} to ${target}.
 
 Rules:
-- Return ONLY the translation.
-- Do not explain.
-- Do not add quotation marks.
+- Return ONLY the translated sentence.
+- No explanation.
+- No quotation marks.
 - Preserve the exact meaning.
-- Make it natural for everyday conversation.
-- Do not add information.
-- Do not remove information.
+- Make it natural and conversational.
+- Do not add or remove information.
 
 Text:
 ${text}
 `;
 
     const response = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent",
       {
         method: "POST",
         headers: {
@@ -67,7 +67,11 @@ ${text}
                 }
               ]
             }
-          ]
+          ],
+          generationConfig: {
+            temperature: 0.2,
+            maxOutputTokens: 200
+          }
         })
       }
     );
@@ -75,28 +79,35 @@ ${text}
     const data = await response.json();
 
     if (!response.ok) {
-      console.error(data);
+      console.error("Gemini error:", JSON.stringify(data, null, 2));
 
       return res.status(response.status).json({
-        error: data?.error?.message || "Gemini request failed"
+        error:
+          data?.error?.message ||
+          "Gemini request failed"
       });
     }
 
     const translation =
-      data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
 
     if (!translation) {
+      console.error(
+        "Unexpected Gemini response:",
+        JSON.stringify(data, null, 2)
+      );
+
       return res.status(500).json({
-        error: "No translation returned"
+        error: "Gemini returned no translation"
       });
     }
 
     res.json({
-      translation: translation.trim()
+      translation
     });
 
   } catch (error) {
-    console.error(error);
+    console.error("Server error:", error);
 
     res.status(500).json({
       error: "Translation server error"
